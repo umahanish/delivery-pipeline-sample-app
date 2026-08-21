@@ -5,7 +5,7 @@
 // should follow: parse+validate with zod, plain JSON responses, explicit
 // status codes.
 
-import express, { type Express } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { countWidgets, createWidget, deleteWidget, getWidget, listWidgets } from "./store.js";
 
@@ -56,6 +56,21 @@ export function createApp(): Express {
       return;
     }
     res.status(204).send();
+  });
+
+  // express.json() throws a SyntaxError (body-parser sets .status/.type)
+  // before any route handler runs on a malformed JSON body -- without
+  // this, Express's default error handler returns an HTML error page
+  // instead of a JSON one, inconsistent with every other error response
+  // this API returns. Must be registered after the routes (Express only
+  // reaches error-handling middleware, identified by its 4-arg
+  // signature, once something calls next(err)).
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof SyntaxError && (err as SyntaxError & { status?: number; type?: string }).type === "entity.parse.failed") {
+      res.status(400).json({ error: "invalid JSON in request body" });
+      return;
+    }
+    next(err);
   });
 
   return app;

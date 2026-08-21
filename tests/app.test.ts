@@ -101,6 +101,18 @@ describe("widgets CRUD", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns a clean JSON error for a malformed JSON body, not an HTML error page", async () => {
+    const url = await startServer();
+    const res = await fetch(`${url}/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{name: Sprocket",
+    });
+    expect(res.status).toBe(400);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(await res.json()).toEqual({ error: "invalid JSON in request body" });
+  });
+
   it("gets a widget by id", async () => {
     const url = await startServer();
     const createRes = await fetch(`${url}/widgets`, {
