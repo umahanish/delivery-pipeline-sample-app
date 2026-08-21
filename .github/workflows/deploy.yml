@@ -1,0 +1,109 @@
+# Phase 6: deploy to staging on merge to main, then scan the *deployed*
+# environment — not the source. This is structurally different from
+# ci.yml's pre-merge checks: nothing here can block a PR (the code is
+# already merged by the time this runs), so a scan finding here means
+# "staging has a problem", not "this PR can't land". See
+# ai-delivery-pipeline's docs/DECISIONS.md.
+#
+# Staging host: Render.com free tier (a container platform with a real
+# public HTTPS URL, no new cost) — deploys are triggered explicitly by
+# this workflow via the Render API (autoDeploy is off on the Render
+# service itself), not by Render's own push-watching, so "deploy" stays a
+# GitHub Actions-owned step per CLAUDE.md.
+#
+# "Qualys scan" in the original brief is Sonatype-adjacent enterprise
+# tooling with no free tier; OWASP ZAP's baseline scan is a real,
+# free, open-source substitute that does the same structural job —
+# attacking the live URL, not the source — labeled as a substitute
+# everywhere it appears, same convention as Trivy standing in for Nexus
+# IQ in ci.yml.
+
+name: Deploy + Scan
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.smoke.outputs.url }}
+    steps:
+      - name: Trigger Render deploy
+        id: trigger
+        run: |
+          set -euo pipefail
+          resp=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            -d '{"clearCache":"do_not_clear"}')
+          deploy_id=$(echo "$resp" | jq -r '.id')
+          echo "Triggered deploy $deploy_id"
+          echo "deploy_id=$deploy_id" >> "$GITHUB_OUTPUT"
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+
+      - name: Wait for deploy to go live
+        run: |
+          set -euo pipefail
+          deploy_id="${{ steps.trigger.outputs.deploy_id }}"
+          for i in $(seq 1 40); do
+            status=$(curl -sf -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${deploy_id}" | jq -r '.status')
+            echo "[$i] deploy status: $status"
+            if [ "$status" = "live" ]; then exit 0; fi
+            if [ "$status" = "build_failed" ] || [ "$status" = "update_failed" ] || [ "$status" = "canceled" ] || [ "$status" = "deactivated" ]; then
+              echo "Deploy ended in status: $status" >&2
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for deploy to go live" >&2
+          exit 1
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+
+      - name: Resolve service URL and smoke-test it
+        id: smoke
+        run: |
+          set -euo pipefail
+          url=$(curl -sf -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}" | jq -r '.serviceDetails.url')
+          echo "Service URL: $url"
+          # Render's free tier sleeps after inactivity -- first request after
+          # a deploy can be a slow cold start, not a real failure.
+          for i in $(seq 1 10); do
+            if curl -sf "$url/health" >/dev/null; then
+              echo "url=$url" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "[$i] not ready yet, retrying..."
+            sleep 10
+          done
+          echo "Service never became reachable at $url/health" >&2
+          exit 1
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+
+  dast-scan:
+    name: dast-scan
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: OWASP ZAP baseline scan (Qualys substitute)
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: ${{ needs.deploy.outputs.url }}
+          allow_issue_writing: false
+          fail_action: false
