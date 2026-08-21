@@ -7,7 +7,7 @@
 
 import express, { type Express } from "express";
 import { z } from "zod";
-import { createWidget, deleteWidget, getWidget, listWidgets } from "./store.js";
+import { countWidgets, createWidget, deleteWidget, getWidget, listWidgets } from "./store.js";
 
 const NewWidgetSchema = z.object({
   name: z.string().min(1),
@@ -24,6 +24,12 @@ export function createApp(): Express {
 
   app.get("/widgets", (_req, res) => {
     res.json({ widgets: listWidgets() });
+  });
+
+  // Must stay above /widgets/:id — otherwise the param route matches
+  // "count" as an id and this endpoint 404s.
+  app.get("/widgets/count", (_req, res) => {
+    res.json({ count: countWidgets() });
   });
 
   app.get("/widgets/:id", (req, res) => {
