@@ -32,6 +32,20 @@ npm run typecheck
 
 Branch protection on `main` requires a human-approved PR review before
 merge — see `ai-delivery-pipeline`'s `CLAUDE.md` Constraints section for
-why that's a fixed part of the pipeline, not optional. CI checks
-(SonarQube, Nexus IQ) and a deploy-to-staging workflow are added by later
-phases of that project.
+why that's a fixed part of the pipeline, not optional.
+
+Every PR against `main` also runs `.github/workflows/ci.yml`, three
+required status checks:
+
+| Check | What it does |
+|---|---|
+| `test` | `npm run typecheck` + `npm test` |
+| `sonarqube` | Real SonarCloud analysis (org `umahanish`) |
+| `dependency-scan` | Trivy filesystem scan for known vulnerabilities |
+
+`dependency-scan` stands in for the "Nexus IQ scan" named in
+`ai-delivery-pipeline`'s `CLAUDE.md` — no Nexus IQ license/instance exists
+in this environment, so Trivy (free, open-source) does the same job for
+real instead. See `ai-delivery-pipeline`'s `docs/DECISIONS.md` for the
+reasoning. A deploy-to-staging workflow is added by a later phase of that
+project.
