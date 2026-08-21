@@ -39,6 +39,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Without a real coverage report, SonarCloud sees 0% new-code
+      # coverage on every PR and the quality gate's default 80% condition
+      # fails regardless of how well-tested the change actually is --
+      # see sonar-project.properties' sonar.javascript.lcov.reportPaths.
+      - run: npm run test:coverage
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
