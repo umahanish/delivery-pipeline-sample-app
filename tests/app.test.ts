@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp, jsonParseErrorHandler } from "../src/app.js";
 import { resetStore } from "../src/store.js";
 
 let server: Server | undefined;
@@ -111,6 +111,18 @@ describe("widgets CRUD", () => {
     expect(res.status).toBe(400);
     expect(res.headers.get("content-type")).toContain("application/json");
     expect(await res.json()).toEqual({ error: "invalid JSON in request body" });
+  });
+
+  it("jsonParseErrorHandler passes non-JSON-parse errors through to next() rather than mislabeling them", () => {
+    const err = new Error("something unrelated broke");
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Parameters<typeof jsonParseErrorHandler>[2];
+    const next = vi.fn();
+
+    jsonParseErrorHandler(err, {} as Parameters<typeof jsonParseErrorHandler>[1], res, next);
+
+    expect(next).toHaveBeenCalledWith(err);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).not.toHaveBeenCalled();
   });
 
   it("gets a widget by id", async () => {
