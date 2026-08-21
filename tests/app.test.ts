@@ -160,3 +160,104 @@ describe("widgets CRUD", () => {
     expect(getRes.status).toBe(404);
   });
 });
+
+describe("PATCH /widgets/:id", () => {
+  async function createWidget(url: string): Promise<{ id: string }> {
+    const createRes = await fetch(`${url}/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Sprocket", quantity: 5 }),
+    });
+    const { widget } = (await createRes.json()) as { widget: { id: string } };
+    return widget;
+  }
+
+  it("updates the quantity and returns the updated widget", async () => {
+    const url = await startServer();
+    const widget = await createWidget(url);
+
+    const patchRes = await fetch(`${url}/widgets/${widget.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ quantity: 12 }),
+    });
+    expect(patchRes.status).toBe(200);
+    const patched = (await patchRes.json()) as { widget: { id: string; name: string; quantity: number } };
+    expect(patched.widget).toMatchObject({ id: widget.id, name: "Sprocket", quantity: 12 });
+
+    const getRes = await fetch(`${url}/widgets/${widget.id}`);
+    const fetched = (await getRes.json()) as { widget: { quantity: number } };
+    expect(fetched.widget.quantity).toBe(12);
+  });
+
+  it("accepts a quantity of 0", async () => {
+    const url = await startServer();
+    const widget = await createWidget(url);
+
+    const res = await fetch(`${url}/widgets/${widget.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ quantity: 0 }),
+    });
+    expect(res.status).toBe(200);
+    const patched = (await res.json()) as { widget: { quantity: number } };
+    expect(patched.widget.quantity).toBe(0);
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const url = await startServer();
+    const res = await fetch(`${url}/widgets/nonexistent`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ quantity: 3 }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "widget not found" });
+  });
+
+  it("rejects a missing quantity", async () => {
+    const url = await startServer();
+    const widget = await createWidget(url);
+
+    const res = await fetch(`${url}/widgets/${widget.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a negative quantity", async () => {
+    const url = await startServer();
+    const widget = await createWidget(url);
+
+    const res = await fetch(`${url}/widgets/${widget.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ quantity: -1 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a non-integer quantity", async () => {
+    const url = await startServer();
+    const widget = await createWidget(url);
+
+    const res = await fetch(`${url}/widgets/${widget.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ quantity: 1.5 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("validates before looking the widget up, so a bad body on an unknown id is a 400", async () => {
+    const url = await startServer();
+    const res = await fetch(`${url}/widgets/nonexistent`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ quantity: "lots" }),
+    });
+    expect(res.status).toBe(400);
+  });
+});

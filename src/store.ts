@@ -49,3 +49,13 @@ export function createWidget(input: NewWidgetInput): Widget {
 export function deleteWidget(id: string): boolean {
   return widgets.delete(id);
 }
+
+/** Updates just the quantity of an existing widget; undefined if no such id. */
+export function updateWidgetQuantity(id: string, quantity: number): Widget | undefined {
+  const widget = widgets.get(id);
+  if (!widget) {
+    return undefined;
+  }
+  widget.quantity = quantity;
+  return widget;
+}
