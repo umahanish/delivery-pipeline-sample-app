@@ -1,0 +1,69 @@
+# CI gates for every PR against main — required status checks (see branch
+# protection). These are quality/security gates, not another chance to
+# write code: a failing check means the PR waits for a human, it never
+# triggers another agent auto-fix loop (see ai-delivery-pipeline's
+# CLAUDE.md Constraints — the human-approval boundary stays meaningful).
+#
+# "Nexus IQ" in the original brief is Sonatype's commercial SCA product;
+# no license/instance exists in this environment. dependency-scan below
+# uses Trivy (free, open-source) as a real substitute doing the same job
+# — filesystem/dependency vulnerability scanning — not a stub. See
+# ai-delivery-pipeline's docs/DECISIONS.md for why.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  sonarqube:
+    name: sonarqube
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  dependency-scan:
+    name: dependency-scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan (Nexus IQ substitute)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+          exit-code: "1"
+          severity: "HIGH,CRITICAL"
+          ignore-unfixed: true
+      - name: Upload results to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: "trivy-results.sarif"
