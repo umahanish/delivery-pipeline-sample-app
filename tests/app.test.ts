@@ -34,6 +34,39 @@ describe("GET /health", () => {
   });
 });
 
+describe("GET /widgets/count", () => {
+  it("returns 0 when the store is empty", async () => {
+    const url = await startServer();
+    const res = await fetch(`${url}/widgets/count`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ count: 0 });
+  });
+
+  it("reflects widgets added and deleted", async () => {
+    const url = await startServer();
+    const createRes = await fetch(`${url}/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Sprocket", quantity: 5 }),
+    });
+    const { widget } = (await createRes.json()) as { widget: { id: string } };
+    await fetch(`${url}/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Cog", quantity: 2 }),
+    });
+
+    const afterCreateRes = await fetch(`${url}/widgets/count`);
+    expect(afterCreateRes.status).toBe(200);
+    expect(await afterCreateRes.json()).toEqual({ count: 2 });
+
+    await fetch(`${url}/widgets/${widget.id}`, { method: "DELETE" });
+
+    const afterDeleteRes = await fetch(`${url}/widgets/count`);
+    expect(await afterDeleteRes.json()).toEqual({ count: 1 });
+  });
+});
+
 describe("widgets CRUD", () => {
   it("starts empty", async () => {
     const url = await startServer();

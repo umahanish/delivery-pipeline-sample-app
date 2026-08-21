@@ -27,6 +27,10 @@ export function listWidgets(): Widget[] {
   return [...widgets.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+export function countWidgets(): number {
+  return widgets.size;
+}
+
 export function getWidget(id: string): Widget | undefined {
   return widgets.get(id);
 }
