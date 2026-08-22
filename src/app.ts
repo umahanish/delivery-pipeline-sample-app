@@ -7,10 +7,16 @@
 
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
-import { countWidgets, createWidget, deleteWidget, getWidget, listWidgets } from "./store.js";
+import { countWidgets, createWidget, deleteWidget, getWidget, listWidgets, updateWidgetQuantity } from "./store.js";
 
 const NewWidgetSchema = z.object({
   name: z.string().min(1),
+  quantity: z.number().int().min(0),
+});
+
+// Same quantity rules as NewWidgetSchema -- a widget updated through PATCH
+// has to end up as valid as one created through POST.
+const UpdateWidgetQuantitySchema = z.object({
   quantity: z.number().int().min(0),
 });
 
@@ -64,6 +70,20 @@ export function createApp(): Express {
       return;
     }
     res.status(201).json({ widget: createWidget(parsed.data) });
+  });
+
+  app.patch("/widgets/:id", (req, res) => {
+    const parsed = UpdateWidgetQuantitySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? "invalid input" });
+      return;
+    }
+    const widget = updateWidgetQuantity(req.params.id, parsed.data.quantity);
+    if (!widget) {
+      res.status(404).json({ error: "widget not found" });
+      return;
+    }
+    res.json({ widget });
   });
 
   app.delete("/widgets/:id", (req, res) => {
