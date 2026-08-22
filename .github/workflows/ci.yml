@@ -77,3 +77,18 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: "trivy-results.sarif"
+
+  # Phase 8 (ai-delivery-pipeline's Zero Trust hardening): a leaked
+  # credential committed by mistake fails the PR here rather than quietly
+  # merging. No GITLEAKS_LICENSE needed -- that's only required for
+  # organization-owned repos, this one is a personal account.
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
